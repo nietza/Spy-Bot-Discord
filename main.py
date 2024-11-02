@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import datetime
 import os
+from spy_config import add_spy_target, remove_spy_target, get_spy_targets
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
@@ -42,6 +43,24 @@ def format_duration(seconds):
 @bot.event
 async def on_ready():
     print(f'Bot {bot.user} is ready for work!')
+    #memory
+    config = get_spy_targets()
+    for user_id, data in config.items():
+        try:
+            target_user = await bot.fetch_user(int(user_id))
+            user_folder = os.path.join(LOGS_PATH, target_user.name)
+            if not os.path.exists(user_folder):
+                os.makedirs(user_folder)
+            user_data[int(user_id)] = {
+                'channel_id': data.get('channel_id'),
+                'last_online': None,
+                'last_offline': None,
+                'log_file': None if data.get('channel_id') else user_folder,
+                'user_folder': user_folder
+            }
+            print(f"Loaded spy configuration for {target_user.name}")
+        except Exception as e:
+            print(f"Error loading spy configuration for user {user_id}: {e}")
 
 @bot.command(name='spy')
 @is_allowed_user()
@@ -49,33 +68,45 @@ async def setup_logging(ctx, user_id: str, channel_id: str = None):
     if not user_id:
         await ctx.send("Please, state user ID")
         return
-
     try:
         target_user = await bot.fetch_user(int(user_id))
     except Exception as e:
         await ctx.send("Wrong user ID!")
         print(f"Error fetching user: {e}")
         return
-
-    # folder
+    #folder config
     user_folder = os.path.join(LOGS_PATH, target_user.name)
     if not os.path.exists(user_folder):
         os.makedirs(user_folder)
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    log_file_path = os.path.join(user_folder, f"logs_{current_date}.txt")
-    
+    #usr data
     user_data[int(user_id)] = {
         'channel_id': channel_id,
         'last_online': None,
         'last_offline': None,
-        'log_file': None if channel_id else log_file_path,
+        'log_file': None if channel_id else user_folder,
         'user_folder': user_folder
     }
+    #config save
+    add_spy_target(user_id, channel_id, None if channel_id else user_folder)
     
     log_location = f"channel <#{channel_id}>" if channel_id else f"folder `{user_folder}`"
     await ctx.send(f"👁️ Started spying on **{target_user.name}**\nLogs will be saved in: {log_location}")
 
-# error
+@bot.command(name='unspy')
+@is_allowed_user()
+async def stop_logging(ctx, user_id: str):
+    try:
+        target_user = await bot.fetch_user(int(user_id))
+        if int(user_id) in user_data:
+            del user_data[int(user_id)]
+            remove_spy_target(user_id)
+            await ctx.send(f"🚫 Stopped spying on **{target_user.name}**")
+        else:
+            await ctx.send(f"⚠️ Wasn't spying on **{target_user.name}**")
+    except Exception as e:
+        await ctx.send("Wrong user ID!")
+        print(f"Error in unspy command: {e}")
+
 @setup_logging.error
 async def spy_error(ctx, error):
     if isinstance(error, commands.CheckFailure):
@@ -83,6 +114,12 @@ async def spy_error(ctx, error):
     else:
         print(f"An error occurred: {error}")
 
+@stop_logging.error
+async def unspy_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("You don't have permission to use this command.")
+    else:
+        print(f"An error occurred: {error}")
 
 async def log_event(user_id: int, message: str):
     data = user_data.get(int(user_id))
@@ -169,6 +206,9 @@ async def help_command(ctx):
 • channel_id - Channel where logs will be sent (optional)
 • user_id - ID of the user to spy on (required)
 
+**/unspy [user_id]** - Stop spying on a user
+• user_id - ID of the user to stop spying on
+
 **The bot tracks:**
 • 🟢 Online/Offline status
 • 🎮 Gaming activity
@@ -180,4 +220,4 @@ If channel_id is not provided, logs will be saved to a text file.
     await ctx.send(help_text)
 
 # Your bot token (will be replaced by setup script)
-bot.run('Bot token')
+bot.run('You can do it manually if u want')

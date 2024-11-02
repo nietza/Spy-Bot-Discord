@@ -41,10 +41,6 @@ python main.py
 2. Use the following commands in Discord:
 - `/shelp` - Show bot usage help
 
-- `/spy [user_id] [channel_id]` - Start tracking a user
-  - `user_id` - ID of the user to track (required)
-  - `channel_id` - Channel ID for sending logs (optional)
-
 ## Logs
 
 If `channel_id` is not specified when using the `/spy` command, logs will be saved to text files in the `Logs Users/[username]/logs_[date].txt` directory.
