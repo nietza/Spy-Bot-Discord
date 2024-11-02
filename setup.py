@@ -20,12 +20,10 @@ def modify_main(bot_token):
         pattern = r"bot\.run\(['\"].*['\"]\)"
         replacement = f"bot.run('{bot_token}')"
         
- 
         modified_content = re.sub(pattern, replacement, content)
         
         with open('main.py', 'w', encoding='utf-8') as file:
             file.write(modified_content)
-
 
         with open('main.py', 'r', encoding='utf-8') as file:
             new_content = file.read()
@@ -40,9 +38,11 @@ def modify_main(bot_token):
         return False
 
 def create_allowed_users(users):
+#if empty - all users are allowed
     try:
         with open('allowed_users.txt', 'w') as file:
-            file.write('\n'.join(users))
+            if users:
+                file.write('\n'.join(users))
         return True
     except Exception as e:
         print(f"Error creating allowed users file: {e}")
@@ -52,19 +52,17 @@ def setup():
     print("Welcome to Discord Spy Bot Setup!")
     print("-" * 40)
 
-
     bot_token = input("What is your bot token?: ").strip()
     while not bot_token:
         print("Token cannot be empty!")
         bot_token = input("What is your bot token?: ").strip()
 
-    users_input = input("Which users are allowed to interact with a bot (state userId after space)?: ").strip()
-    allowed_users = users_input.split()
-    while not allowed_users:
-        print("Please provide at least one user ID!")
-        users_input = input("Which users are allowed to interact with a bot (state userId after space)?: ").strip()
-        allowed_users = users_input.split()
-
+    users_input = input("Which users are allowed to interact with a bot (state USER ID after space, or press Enter to allow all)?: ").strip()
+    allowed_users = users_input.split() if users_input else []
+    
+    if not allowed_users:
+        print("\nNo User IDs provided - all users will have access to bot commands!")
+    
     print("\nStarting setup process...")
 
     if not install_rq():
