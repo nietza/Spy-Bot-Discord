@@ -29,6 +29,10 @@ ALLOWED_USERS = load_allowed_users()
 
 def is_allowed_user():
     async def predicate(ctx):
+        # check if user is allowed
+        if not os.path.exists('allowed_users.txt') or os.path.getsize('allowed_users.txt') == 0:
+            return True
+            
         user_id = str(ctx.author.id)
         print(f"Checking if user {user_id} is allowed...")  
         print(f"Allowed users are: {ALLOWED_USERS}")  
@@ -190,7 +194,113 @@ async def on_voice_state_update(member, before, after):
             duration = (datetime.datetime.now() - user_data[user_id]['last_online']).total_seconds() \
                 if user_data[user_id]['last_online'] else 0
             await log_event(user_id, f"🎤 **{member.name}** left voice channel: **{before.channel.name}**. Was in voice for: {format_duration(int(duration))}")
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    if isinstance(message.channel, discord.DMChannel):
+        await process_dm_command(message)
+    await bot.process_commands(message)
 
+async def process_dm_command(message):
+    # check is allowed
+    if ALLOWED_USERS and str(message.author.id) not in ALLOWED_USERS:
+        await message.channel.send("You don't have permission to use this bot.")
+        return
+
+    content = message.content.lower().strip()
+    if content == "help":
+        help_text = """
+**📋 Available Commands:**
+`spy <user_id> [channel_id]` - Start spying on a user
+• channel_id - Channel where logs will be sent (optional) if not stated, folder with logs will be created. 
+• user_id - ID of the user to spy on (required)
+`unspy <user_id>` - Stop spying on a user
+`list` - Show current spy targets
+`help` - Show this help message
+
+**The bot tracks:**
+• 🟢 Online/Offline status
+• 🎮 Gaming activity
+• 🎤 Voice channel activity
+• ⌨️ Typing activity
+"""
+        await message.channel.send(help_text)
+        return
+
+    #check 
+    if content == "list":
+        if not user_data:
+            await message.channel.send("No users are being spied on currently.")
+            return
+            
+        spy_list = "**Current spy targets:**\n"
+        for user_id in user_data:
+            try:
+                user = await bot.fetch_user(user_id)
+                data = user_data[user_id]
+                location = f"channel <#{data['channel_id']}>" if data['channel_id'] else f"folder `{data['user_folder']}`"
+                spy_list += f"• {user.name} (ID: {user_id}) - Logs in: {location}\n"
+            except Exception as e:
+                spy_list += f"• Unknown user (ID: {user_id}) - Error: {str(e)}\n"
+        await message.channel.send(spy_list)
+        return
+
+    #spy
+    if content.startswith("spy "):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Usage: `spy <user_id> [channel_id]`")
+            return
+            
+        user_id = parts[1]
+        channel_id = parts[2] if len(parts) > 2 else None
+        
+        try:
+            target_user = await bot.fetch_user(int(user_id))
+            user_folder = os.path.join(LOGS_PATH, target_user.name)
+            if not os.path.exists(user_folder):
+                os.makedirs(user_folder)
+            
+            user_data[int(user_id)] = {
+                'channel_id': channel_id,
+                'last_online': None,
+                'last_offline': None,
+                'log_file': None if channel_id else user_folder,
+                'user_folder': user_folder
+            }
+            
+            add_spy_target(user_id, channel_id, None if channel_id else user_folder)
+            log_location = f"channel <#{channel_id}>" if channel_id else f"folder `{user_folder}`"
+            await message.channel.send(f"👁️ Started spying on **{target_user.name}**\nLogs will be saved in: {log_location}")
+        except Exception as e:
+            await message.channel.send(f"Error: {str(e)}")
+        return
+
+    #unspy
+    if content.startswith("unspy "):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Usage: `unspy <user_id>`")
+            return
+            
+        user_id = parts[1]
+        try:
+            target_user = await bot.fetch_user(int(user_id))
+            if int(user_id) in user_data:
+                del user_data[int(user_id)]
+                remove_spy_target(user_id)
+                await message.channel.send(f"🚫 Stopped spying on **{target_user.name}**")
+            else:
+                await message.channel.send(f"⚠️ Wasn't spying on **{target_user.name}**")
+        except Exception as e:
+            await message.channel.send(f"Error: {str(e)}")
+        return
+
+    #if unknown command
+    if content.startswith(("spy", "unspy", "list", "help")):
+        await message.channel.send("Unknown command. Type `help` for available commands.")
+#console control
 @bot.event
 async def on_typing(channel, user, when):
     user_id = user.id
@@ -285,7 +395,9 @@ async def console_input():
         except Exception as e:
             print(f"Error processing console command: {e}")
         await asyncio.sleep(0.1)
-    
+
+#discord server command
+
 @bot.command(name='shelp')
 @is_allowed_user()
 async def help_command(ctx):
@@ -308,6 +420,6 @@ async def help_command(ctx):
 If channel_id is not provided, logs will be saved to a text file.
 """
     await ctx.send(help_text)
-    
+
 # Your bot token (will be replaced by setup script)
 bot.run('You can do it manually if u want')
