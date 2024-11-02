@@ -380,7 +380,7 @@ async def process_console_command(command):
     elif cmd == 'help':
         print("""
 📋 Console Commands Help:
-**/spy [user_id] [channel_id]** - Start spying on a user
+**spy [user_id] [channel_id]** - Start spying on a user
 • channel_id - Channel where logs will be sent (optional) if not stated, folder with logs will be created. 
 • user_id - ID of the user to spy on (required)
 unspy <user_id> - Stop spying on a user
