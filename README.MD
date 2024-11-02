@@ -39,7 +39,10 @@ python main.py
 ```
 
 2. Use the following commands in Discord:
-- `/shelp` - in any chat in the server show bot usage help
+
+- `/shelp` - in any chat in the server show bot usage help.
+
+or type `help` in console, and use commands there.
 
 ## Logs
 
