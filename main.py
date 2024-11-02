@@ -7,7 +7,7 @@ import aioconsole
 from spy_config import add_spy_target, remove_spy_target, get_spy_targets
 
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='/', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 LOGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs Users")
 if not os.path.exists(LOGS_PATH):
@@ -128,17 +128,18 @@ async def unspy_error(ctx, error):
     else:
         print(f"An error occurred: {error}")
 
-async def log_event(user_id: int, message: str):
+async def log_event(user_id: int, message: str, guild_name: str = None):
     data = user_data.get(int(user_id))
     if not data:
         return
 
+    server_info = f" [Server: {guild_name}]" if guild_name else ""
     discord_timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    discord_message = f"{message}     **{discord_timestamp}**"
+    discord_message = f"{message}{server_info}     **{discord_timestamp}**"
 
     file_timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    file_message = message.replace('**', '') 
-    file_log = f"{file_message}     [{file_timestamp}]"
+    file_message = message.replace('**', '')
+    file_log = f"{file_message}{server_info}     [{file_timestamp}]"
 
     if data['channel_id']:
         try:
@@ -189,11 +190,12 @@ async def on_voice_state_update(member, before, after):
 
     if before.channel != after.channel:
         if after.channel:
-            await log_event(user_id, f"🎤 **{member.name}** joined voice channel: **{after.channel.name}**")
+            await log_event(user_id, f"🎤 **{member.name}** joined voice channel: **{after.channel.name}**", after.channel.guild.name)
         else:
             duration = (datetime.datetime.now() - user_data[user_id]['last_online']).total_seconds() \
                 if user_data[user_id]['last_online'] else 0
             await log_event(user_id, f"🎤 **{member.name}** left voice channel: **{before.channel.name}**. Was in voice for: {format_duration(int(duration))}")
+            
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -307,7 +309,8 @@ async def on_typing(channel, user, when):
     if user_id not in user_data:
         return
 
-    await log_event(user_id, f"⌨️ **{user.name}** started typing in channel: **{channel.name}**")
+    await log_event(user_id, f"⌨️ **{user.name}** started typing in channel: **{channel.name}**" , channel.guild.name if hasattr(channel, 'guild') else None)
+
 async def process_console_command(command):
     """Process commands in console"""
     parts = command.split()
@@ -359,6 +362,20 @@ async def process_console_command(command):
                 print(f"Error: {e}")
         else:
             print("Usage: unspy <user_id>")
+    elif cmd == 'list':
+        if not user_data:
+            print("No users are being spied on currently.")
+            return
+            
+        print("Current spy targets:")
+        for user_id in user_data:
+            try:
+                user = await bot.fetch_user(user_id)
+                data = user_data[user_id]
+                location = f"channel #{data['channel_id']}" if data['channel_id'] else f"folder {data['user_folder']}"
+                print(f"• {user.name} (ID: {user_id}) - Logs in: {location}")
+            except Exception as e:
+                print(f"• Unknown user (ID: {user_id}) - Error: {str(e)}")
 
     elif cmd == 'help':
         print("""
@@ -367,6 +384,7 @@ async def process_console_command(command):
 • channel_id - Channel where logs will be sent (optional) if not stated, folder with logs will be created. 
 • user_id - ID of the user to spy on (required)
 unspy <user_id> - Stop spying on a user
+list - Show current spy targets
 help - Show this help message
 exit - Stop the bot
 
@@ -396,7 +414,23 @@ async def console_input():
             print(f"Error processing console command: {e}")
         await asyncio.sleep(0.1)
 
-#discord server command
+@bot.command(name='list')
+@is_allowed_user()
+async def list_spied_users(ctx):
+    if not user_data:
+        await ctx.send("No users are being spied on currently.")
+        return
+        
+    spy_list = "**Current spy targets:**\n"
+    for user_id in user_data:
+        try:
+            user = await bot.fetch_user(user_id)
+            data = user_data[user_id]
+            location = f"channel <#{data['channel_id']}>" if data['channel_id'] else f"folder `{data['user_folder']}`"
+            spy_list += f"• {user.name} (ID: {user_id}) - Logs in: {location}\n"
+        except Exception as e:
+            spy_list += f"• Unknown user (ID: {user_id}) - Error: {str(e)}\n"
+    await ctx.send(spy_list)
 
 @bot.command(name='shelp')
 @is_allowed_user()
@@ -404,12 +438,15 @@ async def help_command(ctx):
     help_text = """
 **📋 Spy Bot Help Guide:**
 
-**/spy [user_id] [channel_id]** - Start spying on a user
+**!spy [user_id] [channel_id]** - Start spying on a user
 • channel_id - Channel where logs will be sent (optional)
 • user_id - ID of the user to spy on (required)
 
-**/unspy [user_id]** - Stop spying on a user
+**!unspy [user_id]** - Stop spying on a user
 • user_id - ID of the user to stop spying on
+**!list** - Show current spy targets
+
+
 
 **The bot tracks:**
 • 🟢 Online/Offline status
