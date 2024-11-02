@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 import datetime
 import os
+import asyncio
+import aioconsole
 from spy_config import add_spy_target, remove_spy_target, get_spy_targets
 
 intents = discord.Intents.all()
@@ -43,7 +45,7 @@ def format_duration(seconds):
 @bot.event
 async def on_ready():
     print(f'Bot {bot.user} is ready for work!')
-    #memory
+    bot.loop.create_task(console_input())
     config = get_spy_targets()
     for user_id, data in config.items():
         try:
@@ -51,6 +53,7 @@ async def on_ready():
             user_folder = os.path.join(LOGS_PATH, target_user.name)
             if not os.path.exists(user_folder):
                 os.makedirs(user_folder)
+            
             user_data[int(user_id)] = {
                 'channel_id': data.get('channel_id'),
                 'last_online': None,
@@ -68,17 +71,18 @@ async def setup_logging(ctx, user_id: str, channel_id: str = None):
     if not user_id:
         await ctx.send("Please, state user ID")
         return
+
     try:
         target_user = await bot.fetch_user(int(user_id))
     except Exception as e:
         await ctx.send("Wrong user ID!")
         print(f"Error fetching user: {e}")
         return
-    #folder config
     user_folder = os.path.join(LOGS_PATH, target_user.name)
     if not os.path.exists(user_folder):
         os.makedirs(user_folder)
-    #usr data
+    
+    #user data save
     user_data[int(user_id)] = {
         'channel_id': channel_id,
         'last_online': None,
@@ -86,7 +90,6 @@ async def setup_logging(ctx, user_id: str, channel_id: str = None):
         'log_file': None if channel_id else user_folder,
         'user_folder': user_folder
     }
-    #config save
     add_spy_target(user_id, channel_id, None if channel_id else user_folder)
     
     log_location = f"channel <#{channel_id}>" if channel_id else f"folder `{user_folder}`"
@@ -163,7 +166,7 @@ async def on_presence_update(before, after):
                 await log_event(user_id, f"🔴 **{after.name}** went offline. Was online for: {format_duration(int(duration))}")
         elif str(after.status) == "online":
             user_data[user_id]['last_online'] = datetime.datetime.now()
-            await log_event(user_id, f"🟢 **{after.name}** went online")
+            await log_event(user_id, f"🟢 **{after.name}** is online now")
 
     before_activity = next((activity for activity in before.activities if isinstance(activity, discord.Game)), None)
     after_activity = next((activity for activity in after.activities if isinstance(activity, discord.Game)), None)
@@ -195,6 +198,93 @@ async def on_typing(channel, user, when):
         return
 
     await log_event(user_id, f"⌨️ **{user.name}** started typing in channel: **{channel.name}**")
+async def process_console_command(command):
+    """Process commands in console"""
+    parts = command.split()
+    if not parts:
+        return
+
+    cmd = parts[0].lower()
+    args = parts[1:]
+
+    if cmd == 'spy':
+        if len(args) >= 1:
+            user_id = args[0]
+            channel_id = args[1] if len(args) > 1 else None
+            try:
+                target_user = await bot.fetch_user(int(user_id))
+                user_folder = os.path.join(LOGS_PATH, target_user.name)
+                if not os.path.exists(user_folder):
+                    os.makedirs(user_folder)
+                
+                user_data[int(user_id)] = {
+                    'channel_id': channel_id,
+                    'last_online': None,
+                    'last_offline': None,
+                    'log_file': None if channel_id else user_folder,
+                    'user_folder': user_folder
+                }
+                
+                add_spy_target(user_id, channel_id, None if channel_id else user_folder)
+                print(f"👁️ Started spying on {target_user.name}")
+                log_location = f"channel #{channel_id}" if channel_id else f"folder {user_folder}"
+                print(f"Logs will be saved in: {log_location}")
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            print("Usage: spy <user_id> [channel_id]")
+
+    elif cmd == 'unspy':
+        if len(args) >= 1:
+            user_id = args[0]
+            try:
+                target_user = await bot.fetch_user(int(user_id))
+                if int(user_id) in user_data:
+                    del user_data[int(user_id)]
+                    remove_spy_target(user_id)
+                    print(f"🚫 Stopped spying on {target_user.name}")
+                else:
+                    print(f"⚠️ Wasn't spying on {target_user.name}")
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            print("Usage: unspy <user_id>")
+
+    elif cmd == 'help':
+        print("""
+📋 Console Commands Help:
+**/spy [user_id] [channel_id]** - Start spying on a user
+• channel_id - Channel where logs will be sent (optional) if not stated, folder with logs will be created. 
+• user_id - ID of the user to spy on (required)
+unspy <user_id> - Stop spying on a user
+help - Show this help message
+exit - Stop the bot
+
+The bot tracks:
+• 🟢 Online/Offline status
+• 🎮 Gaming activity
+• 🎤 Voice channel activity
+• ⌨️ Typing activity
+        """)
+    
+    elif cmd == 'exit':
+        print("Stopping the bot...")
+        await bot.close()
+    
+    else:
+        print(f"Unknown command: {cmd}")
+        print("Type 'help' for available commands")
+
+async def console_input():
+    """console input"""
+    print("Console commands enabled. Type 'help' for available commands.")
+    while True:
+        try:
+            command = await aioconsole.ainput('> ')
+            await process_console_command(command)
+        except Exception as e:
+            print(f"Error processing console command: {e}")
+        await asyncio.sleep(0.1)
     
 @bot.command(name='shelp')
 @is_allowed_user()
@@ -218,6 +308,6 @@ async def help_command(ctx):
 If channel_id is not provided, logs will be saved to a text file.
 """
     await ctx.send(help_text)
-
+    
 # Your bot token (will be replaced by setup script)
 bot.run('You can do it manually if u want')
