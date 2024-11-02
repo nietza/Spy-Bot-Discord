@@ -40,7 +40,7 @@ python main.py
 
 2. Get help. 
 
-- `/shelp` - in any chat in the server to show bot usage help.
+- `!shelp` - in any chat in the server to show bot usage help.
 
 or `help` in console, or in bot DM. 
 
