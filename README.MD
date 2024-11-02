@@ -38,15 +38,11 @@ python setup.py
 python main.py
 ```
 
-2. Use the following commands in Discord:
+2. Get help. 
 
 - `/shelp` - in any chat in the server to show bot usage help.
 
-or type `help` in console, and use commands there.
-
-## Logs
-
-If `channel_id` is not specified when using the `/spy` command, logs will be saved to text files in the `Logs Users/[username]/logs_[date].txt` directory.
+or `help` in console, or in bot DM. 
 
 ## Note
 
