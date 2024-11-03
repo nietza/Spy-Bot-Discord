@@ -31,14 +31,15 @@ python setup.py
 ---
 
 ## Usage
+1. Add bot to the server
 
-1. Run the bot:
+2. Run the bot:
 
 ```bash
 python main.py
 ```
 
-2. Get help. 
+3. Get help. 
 
 - `!shelp` - in any chat in the discord server to show bot usage help.
 
