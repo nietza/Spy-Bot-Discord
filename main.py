@@ -237,6 +237,9 @@ async def process_dm_command(message):
 • user_id - ID of the user to spy on (required)
 `unspy <user_id>` - Stop spying on a user
 `list` - Show current spy targets
+`mirror <source_channel_id> [copy_channel_id]` - mirror everything from predetermined text channel into another
+• unmirror <source_channel_id> - stop mirroring
+• mirrorlist - show mirrored channels
 `help` - Show this help message
 
 **The bot tracks:**
@@ -494,6 +497,9 @@ async def process_console_command(command):
 • user_id - ID of the user to spy on (required)
 unspy <user_id> - Stop spying on a user
 list - Show current spy targets
+mirror <source_channel_id> [copy_channel_id] - mirror everything from predetermined text channel into another
+• unmirror <source_channel_id> - stop mirroring
+• mirrorlist - show mirrored channels
 help - Show this help message
 exit - Stop the bot
 
@@ -594,6 +600,10 @@ async def help_command(ctx):
 **!unspy [user_id]** - Stop spying on a user
 • user_id - ID of the user to stop spying on
 **!list** - Show current spy targets
+**!mirror <source_channel_id> [copy_channel_id]** - mirror everything from predetermined text channel into another
+**!unmirror <source_channel_id>** - stop mirroring
+**!mirrorlist** - show mirrored channels
+
 
 
 
